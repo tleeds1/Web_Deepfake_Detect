@@ -38,6 +38,9 @@ A web application for detecting deepfake images and videos using machine learnin
 4. **Download or place your trained model weights**
    - Place your model files in the `weights/` directory.
 
+### Download Pretrained Model Weights
+Download the pretrained model weights from [this Google Drive folder](https://drive.google.com/drive/folders/1yhn5PL3zNvgi0fJwEKMZHuC_-eQYs8gq?usp=drive_link) and place them in the `weights/` directory before running the application.
+
 ## Running the Web Application
 
 1. **Start the web server**
