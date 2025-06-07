@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deepfake Detection</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            overflow: hidden;
+        }
+        .detection-overlay {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 200px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            -webkit-app-region: drag;
+            user-select: none;
+        }
+        .detection-result {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+            -webkit-app-region: no-drag;
+        }
+        .detection-confidence {
+            font-size: 0.9em;
+            opacity: 0.8;
+            -webkit-app-region: no-drag;
+        }
+        .close-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            -webkit-app-region: no-drag;
+        }
+        .close-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .close-button::before,
+        .close-button::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 2px;
+            background: white;
+            transform: rotate(45deg);
+        }
+        .close-button::after {
+            transform: rotate(-45deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="detection-overlay" id="detectionOverlay">
+        <div class="close-button" id="closeOverlay"></div>
+        <div class="detection-result" id="detectionResult">Waiting for detection...</div>
+        <div class="detection-confidence" id="detectionConfidence"></div>
+    </div>
+
+    <script>
+        document.getElementById('closeOverlay').addEventListener('click', () => {
+            window.electronAPI.closeFloatingWindow();
+        });
+
+        window.electronAPI.onUpdateDetection((event, data) => {
+            const detectionResult = document.getElementById('detectionResult');
+            const detectionConfidence = document.getElementById('detectionConfidence');
+
+            if (data.label === 'No Face') {
+                detectionResult.textContent = 'No face detected';
+                detectionResult.className = 'detection-result text-yellow-400';
+                detectionConfidence.textContent = '';
+            } else {
+                detectionResult.textContent = data.label === 'Fake' ? 'DEEPFAKE DETECTED!' : 'Real';
+                detectionResult.className = `detection-result ${data.label === 'Fake' ? 'text-red-400' : 'text-green-400'}`;
+                detectionConfidence.textContent = `${(data.confidence * 100).toFixed(1)}% confidence`;
+            }
+        });
+    </script>
+</body>
+</html> 

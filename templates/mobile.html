@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Deepfake Detector</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#4F46E5">
+    <style>
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+            background: #000;
+        }
+        .video-feed {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+        }
+        .status-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 1.2em;
+            z-index: 10;
+        }
+        .result-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 1.2em;
+            z-index: 10;
+            text-align: center;
+            min-width: 200px;
+        }
+        .install-prompt {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #4F46E5;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            z-index: 100;
+            display: none;
+        }
+        .install-prompt.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="min-h-screen flex flex-col">
+        <header class="p-4 bg-gray-800">
+            <h1 class="text-xl font-bold text-center">Deepfake Detector</h1>
+        </header>
+
+        <main class="flex-1">
+            <div class="video-container">
+                <video id="video" class="video-feed" autoplay playsinline></video>
+                <div class="status-overlay">
+                    <span id="status">Initializing...</span>
+                </div>
+                <div class="result-overlay">
+                    <div id="result">Waiting for detection...</div>
+                    <div id="confidence" class="text-sm"></div>
+                </div>
+            </div>
+
+            <div class="p-4">
+                <div class="flex justify-center space-x-4">
+                    <button id="startBtn" class="px-6 py-2 bg-blue-500 text-white rounded-full">
+                        Start Detection
+                    </button>
+                    <button id="stopBtn" class="px-6 py-2 bg-red-500 text-white rounded-full" disabled>
+                        Stop
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <div id="installPrompt" class="install-prompt">
+            <p>Install this app for a better experience</p>
+            <button id="installBtn" class="mt-2 px-4 py-2 bg-white text-blue-500 rounded-full">
+                Install
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let socket = io();
+        let video = document.getElementById('video');
+        let startBtn = document.getElementById('startBtn');
+        let stopBtn = document.getElementById('stopBtn');
+        let statusElement = document.getElementById('status');
+        let resultElement = document.getElementById('result');
+        let confidenceElement = document.getElementById('confidence');
+        let stream = null;
+        let isProcessing = false;
+        let installPrompt = document.getElementById('installPrompt');
+        let installBtn = document.getElementById('installBtn');
+        let deferredPrompt;
+
+        // Handle PWA installation
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installPrompt.classList.add('show');
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    console.log('User accepted the install prompt');
+                }
+                deferredPrompt = null;
+                installPrompt.classList.remove('show');
+            }
+        });
+
+        // Socket.io event handlers
+        socket.on('connect', () => {
+            statusElement.textContent = 'Connected';
+        });
+
+        socket.on('disconnect', () => {
+            statusElement.textContent = 'Disconnected';
+        });
+
+        socket.on('detection_result', (data) => {
+            resultElement.textContent = data.label;
+            confidenceElement.textContent = `${(data.confidence * 100).toFixed(1)}% confidence`;
+            resultElement.className = data.label === 'Fake' ? 'text-red-400' : 'text-green-400';
+        });
+
+        // Start video stream
+        async function startVideo() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                video.srcObject = stream;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                isProcessing = true;
+                processVideo();
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                statusElement.textContent = 'Error: Camera not accessible';
+            }
+        }
+
+        // Stop video stream
+        function stopVideo() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                isProcessing = false;
+                statusElement.textContent = 'Stopped';
+            }
+        }
+
+        // Process video frames
+        function processVideo() {
+            if (!isProcessing) return;
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = canvas.toDataURL('image/jpeg', 0.8);
+            
+            socket.emit('video_frame', frame);
+            
+            requestAnimationFrame(processVideo);
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', startVideo);
+        stopBtn.addEventListener('click', stopVideo);
+
+        // Handle visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isProcessing) {
+                stopVideo();
+            }
+        });
+    </script>
+</body>
+</html> 

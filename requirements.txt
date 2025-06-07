@@ -1,0 +1,13 @@
+torch
+torchvision
+opencv-python
+numpy
+pandas
+pillow
+albumentations
+facenet-pytorch
+flask
+werkzeug
+flask-socketio
+python-engineio
+python-socketio
